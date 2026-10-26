@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Grade Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a class-record sheet on the left, a live result slip on the right (stacks on phones with a sticky grade bar). */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#14212b; --muted:#5b6b78; --line:#d7dee4;
+  --accent:#0f5c6e; --accent-soft:#e1eef1;
+  --pass:#1d7a4a; --pass-bg:#e3f3ea; --warn:#a15c00; --warn-bg:#fdf0dc;
+  --fail:#b3261e; --fail-bg:#fbe5e3; --inc:#4c5a66; --inc-bg:#e8ecef;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f161b; --surface:#172129; --ink:#e6edf2; --muted:#93a3b0; --line:#2a3741;
+  --accent:#5fb7c9; --accent-soft:#16323a;
+  --pass:#6ccf95; --pass-bg:#15301f; --warn:#f0b35a; --warn-bg:#352612;
+  --fail:#f28b82; --fail-bg:#3a1a18; --inc:#a8b4be; --inc-bg:#232e36; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f161b; --surface:#172129; --ink:#e6edf2; --muted:#93a3b0; --line:#2a3741;
+  --accent:#5fb7c9; --accent-soft:#16323a;
+  --pass:#6ccf95; --pass-bg:#15301f; --warn:#f0b35a; --warn-bg:#352612;
+  --fail:#f28b82; --fail-bg:#3a1a18; --inc:#a8b4be; --inc-bg:#232e36; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 96px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lede{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.formula{font-family:var(--mono);font-size:13px;background:var(--accent-soft);color:var(--accent);padding:2px 6px;border-radius:4px;white-space:nowrap}
+
+.coursebar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.coursebar select{flex:1 1 220px;min-width:0}
+select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;font-weight:500;cursor:pointer;border-radius:6px;padding:8px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+button.primary:hover{opacity:.9;color:var(--surface)}
+button.danger.armed{background:var(--fail);border-color:var(--fail);color:var(--surface)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:22px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.sheet-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.sheet-head label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+#courseName{font-family:var(--display);font-weight:600;font-size:20px;border:none;padding:2px 0;background:transparent;border-bottom:1px dashed var(--line);border-radius:0}
+.sample-note{font-size:13px;color:var(--warn);background:var(--warn-bg);padding:6px 10px;border-radius:6px}
+
+.row,.cols{display:grid;grid-template-columns:minmax(0,1fr) 84px 84px 92px 76px 34px;gap:10px;align-items:center;padding:10px 18px}
+.cols{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding-block:10px 4px}
+.cols span:nth-child(n+2){text-align:center}
+.row{border-top:1px solid var(--line)}
+.row:first-of-type{border-top:none}
+.row input.num{text-align:center;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.row .cap{display:none;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.trans{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:center;font-size:14px;color:var(--ink)}
+.trans.empty{color:var(--muted)}
+.row.bad input.score{border-color:var(--fail);background:var(--fail-bg)}
+.row.missing input.score{border-style:dashed}
+.rm{padding:6px;line-height:1;border:none;background:transparent;color:var(--muted);font-size:18px}
+.rm:hover{color:var(--fail)}
+.sheet-foot{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;padding:14px 18px;border-top:1px solid var(--line);background:var(--bg)}
+.wsum{font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums}
+.wsum.off{color:var(--fail);font-weight:600}
+
+@media (max-width:640px){
+  .cols{display:none}
+  .row{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:6px;padding:14px 16px}
+  .row .f-name{grid-column:1 / 4}
+  .row .rm{grid-column:4;justify-self:end}
+  .row .cap{display:block}
+  .row .cell{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .row .cell:not(.f-name) .cap{text-align:center}
+  .trans{padding-top:8px}
+}
+
+.slip{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:16px;position:sticky;top:16px}
+.slip h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:600}
+.big{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.pct{font-family:var(--display);font-weight:800;font-size:64px;line-height:1;font-variant-numeric:tabular-nums}
+.pct small{font-size:28px;color:var(--muted);font-weight:600}
+.eqv{font-family:var(--mono);font-size:30px;font-weight:600}
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-weight:600;font-size:14px}
+.st-pass{color:var(--pass);background:var(--pass-bg)}
+.st-rem{color:var(--warn);background:var(--warn-bg)}
+.st-fail{color:var(--fail);background:var(--fail-bg)}
+.st-inc{color:var(--inc);background:var(--inc-bg)}
+.exact{font-size:13px;color:var(--muted)}
+.msg{font-size:14px;padding:10px 12px;border-radius:6px}
+.msg ul{margin:6px 0 0;padding-left:18px}
+.breakdown{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.bd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.bd span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.bd span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.bd.total{border-top:1px solid var(--line);padding-top:6px;font-weight:600}
+.bd.total span:first-child{color:var(--ink)}
+.note{font-size:13px;line-height:1.5;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;margin:0}
+.note b{color:var(--ink)}
+
+.scale{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.scale h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;font-weight:600}
+.scale-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}
+.sc{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:6px;background:var(--bg);font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+.sc.on{background:var(--accent);color:var(--surface)}
+.scale p{font-size:13px;color:var(--muted);margin:10px 0 0}
+
+.minibar{display:none}
+@media (max-width:860px){
+  .slip{position:static}
+  .minibar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--surface);border-top:1px solid var(--line);
+    padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+    justify-content:space-between;align-items:center;gap:10px}
+  .minibar b{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums}
+}
+@media (prefers-reduced-motion:no-preference){.pct,.eqv{transition:color .2s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Grade Calculator</h1>
+    <p class="lede">Enter each assessment task, its weight, total points and your score. Use your actual score for tasks you've taken and the score you expect for the rest. Each score is transmuted with <span class="formula">(Score ÷ Total) × 62.5 + 37.5</span>, then multiplied by its weight.</p>
+  </header>
+
+  <div class="coursebar">
+    <select id="courseSel" aria-label="Saved courses"></select>
+    <button id="newCourse" class="primary">New course</button>
+    <button id="delCourse" class="danger">Delete course</button>
+  </div>
+
+  <div class="grid">
+    <section class="sheet" aria-label="Assessment tasks">
+      <div class="sheet-head">
+        <label for="courseName">Course</label>
+        <input id="courseName" placeholder="e.g. CC101 Computer Programming">
+        <div id="sampleNote" class="sample-note" hidden>These are sample scores. Replace them with your own.</div>
+      </div>
+      <div class="cols" aria-hidden="true"><span>Assessment task</span><span>Weight %</span><span>Total pts</span><span>Your score</span><span>Grade</span><span></span></div>
+      <div id="rows"></div>
+      <div class="sheet-foot">
+        <button id="addRow">+ Add task</button>
+        <span class="wsum" id="wsum">Total weight: 0%</span>
+      </div>
+    </section>
+
+    <aside class="slip" aria-live="polite">
+      <h2>Final grade</h2>
+      <div class="big"><div class="pct" id="pct">–</div><div class="eqv" id="eqv"></div></div>
+      <div><span class="pill st-inc" id="status">Incomplete</span></div>
+      <div class="exact" id="exact"></div>
+      <div id="msgs"></div>
+      <div class="breakdown" id="breakdown"></div>
+      <p class="note"><b>This is an estimate, not your official grade.</b> It is based only on the tasks and scores you entered. Your instructor may also consider other things, such as recitation, attendance, class participation or bonus points, and may compute grades differently. Your official final grade is the one released by your instructor.</p>
+    </aside>
+  </div>
+
+  <section class="scale">
+    <h2>Grading system</h2>
+    <div class="scale-grid" id="scale"></div>
+    <p>The final percentage is cut off to a whole number before conversion (89.62 becomes 89). 75 and above passes. 70–74 is for removal. Below 70 is failed.</p>
+  </section>
+</div>
+
+<div class="minibar" aria-hidden="true"><span id="miniLabel">Final grade</span><b id="mini">–</b></div>
+
+<script>
+const SCALE=[[98,"1.00"],[94,"1.25"],[90,"1.50"],[88,"1.75"],[85,"2.00"],[83,"2.25"],[80,"2.50"],[78,"2.75"],[75,"3.00"],[70,"4.00"],[0,"5.00"]];
+const RANGES=["98–100","94–97","90–93","88–89","85–87","83–84","80–82","78–79","75–77","70–74","below 70"];
+const KEY="gradecalc.v1";
+const uid=()=>Math.random().toString(36).slice(2,9);
+const t=(name,weight,total,score)=>({id:uid(),name,weight,total,score});
+function sampleCourse(){return{id:uid(),sample:true,name:"CC101 Computer Programming (sample)",tasks:[
+  t("Prelim",20,50,32),t("Midterm",20,50,36),t("Finals",20,50,40),
+  t("Lab Act 1 (ILO1)",5,20,18),t("Lab Act 1 (ILO4)",5,20,17),t("Lab Act 2",10,50,42),
+  t("Lab Act 3",10,50,45),t("Final Project (ILO3)",5,50,44),t("Final Project (ILO4)",5,50,46)]}}
+function blankCourse(){return{id:uid(),name:"",tasks:[t("Prelim","","",""),t("Midterm","","",""),t("Finals","","","")]}}
+
+let state;
+try{state=JSON.parse(localStorage.getItem(KEY))}catch(e){state=null}
+if(!state||!Array.isArray(state.courses)||!state.courses.length){const c=sampleCourse();state={active:c.id,courses:[c]}}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
+const cur=()=>state.courses.find(c=>c.id===state.active)||state.courses[0];
+
+const $=id=>document.getElementById(id);
+const num=v=>{if(v===""||v===null||v===undefined)return null;const n=Number(v);return Number.isFinite(n)?n:NaN};
+const fmt=(n,d=2)=>n.toFixed(d);
+const equiv=p=>SCALE.find(([lo])=>p>=lo)[1];
+const statusOf=p=>p>=75?["Passed","st-pass"]:p>=70?["For removal","st-rem"]:["Failed","st-fail"];
+
+function renderCourses(){
+  const sel=$("courseSel");sel.innerHTML="";
+  state.courses.forEach(c=>{const o=document.createElement("option");o.value=c.id;o.textContent=c.name||"Untitled course";sel.appendChild(o)});
+  sel.value=cur().id;
+}
+function renderRows(){
+  const c=cur();$("courseName").value=c.name;$("sampleNote").hidden=!c.sample;
+  const box=$("rows");box.innerHTML="";
+  c.tasks.forEach((tk,i)=>{
+    const r=document.createElement("div");r.className="row";r.dataset.id=tk.id;
+    r.innerHTML=`
+      <div class="cell f-name"><span class="cap">Assessment task</span><input id="n-${tk.id}" aria-label="Task name" placeholder="Task ${i+1}"></div>
+      <div class="cell"><span class="cap">Weight %</span><input class="num" id="w-${tk.id}" inputmode="decimal" aria-label="Weight percent" placeholder="0"></div>
+      <div class="cell"><span class="cap">Total pts</span><input class="num" id="t-${tk.id}" inputmode="decimal" aria-label="Total points" placeholder="0"></div>
+      <div class="cell"><span class="cap">Your score</span><input class="num score" id="s-${tk.id}" inputmode="decimal" aria-label="Your score" placeholder="—"></div>
+      <div class="cell"><span class="cap">Grade</span><span class="trans empty" id="g-${tk.id}">–</span></div>
+      <button class="rm" aria-label="Remove task" title="Remove task">×</button>`;
+    box.appendChild(r);
+    const set=(p,k)=>{const el=r.querySelector("#"+p+"-"+tk.id);el.value=tk[k]??"";el.addEventListener("input",()=>{tk[k]=el.value;if(c.sample){c.sample=false;$("sampleNote").hidden=true}save();compute()})};
+    set("n","name");set("w","weight");set("t","total");set("s","score");
+    r.querySelector(".rm").addEventListener("click",()=>{c.tasks=c.tasks.filter(x=>x.id!==tk.id);save();renderRows()});
+  });
+  compute();
+}
+
+function compute(){
+  const c=cur();let sum=0,wsum=0;const missing=[],bad=[],bd=[];
+  c.tasks.forEach((tk,i)=>{
+    const label=tk.name.trim()||`Task ${i+1}`;
+    const w=num(tk.weight),T=num(tk.total),s=num(tk.score);
+    const row=document.querySelector(`.row[data-id="${tk.id}"]`);const g=$("g-"+tk.id);
+    if(w!==null&&!Number.isNaN(w))wsum+=w;
+    row.classList.remove("bad","missing");
+    let problem=null;
+    if(w===null||Number.isNaN(w)||w<0)problem="enter a valid weight";
+    else if(T===null||Number.isNaN(T)||T<=0)problem="enter total points above 0";
+    if(s===null){missing.push(label);row.classList.add("missing");g.textContent="–";g.classList.add("empty");if(problem)bad.push(`${label}: ${problem}`);return}
+    if(Number.isNaN(s)||s<0)problem="score must be 0 or more";
+    else if(!problem&&s>T)problem=`score is higher than the total of ${T}`;
+    if(problem){bad.push(`${label}: ${problem}`);row.classList.add("bad");g.textContent="–";g.classList.add("empty");return}
+    const tr=s/T*62.5+37.5,contrib=tr*w/100;sum+=contrib;
+    g.textContent=fmt(tr);g.classList.remove("empty");
+    bd.push([`${label} · ${fmt(tr)} × ${w}%`,contrib]);
+  });
+
+  const ws=$("wsum");const wOk=Math.abs(wsum-100)<1e-6;
+  ws.textContent=`Total weight: ${+wsum.toFixed(2)}%`;ws.classList.toggle("off",!wOk);
+
+  const msgs=[];
+  if(missing.length)msgs.push(`<div class="msg st-inc"><b>Missing scores:</b><ul>${missing.map(m=>`<li>${esc(m)}</li>`).join("")}</ul></div>`);
+  if(bad.length)msgs.push(`<div class="msg st-fail"><b>Check these entries:</b><ul>${bad.map(m=>`<li>${esc(m)}</li>`).join("")}</ul></div>`);
+  if(!wOk)msgs.push(`<div class="msg st-rem">Weights add up to ${+wsum.toFixed(2)}%. They should total 100%.</div>`);
+  if(!c.tasks.length)msgs.push(`<div class="msg st-inc">Add an assessment task to start.</div>`);
+  $("msgs").innerHTML=msgs.join("");
+
+  const ready=c.tasks.length&&!missing.length&&!bad.length&&wOk;
+  const st=$("status");
+  document.querySelectorAll(".sc").forEach(e=>e.classList.remove("on"));
+  if(ready){
+    const p=Math.floor(sum+1e-9),e=equiv(p),[lab,cls]=statusOf(p);
+    $("pct").innerHTML=`${p}<small>%</small>`;$("eqv").textContent=e;
+    st.textContent=lab;st.className="pill "+cls;
+    $("exact").textContent=`Computed: ${fmt(sum)}% → cut off to ${p}%`;
+    $("mini").textContent=`${p}% · ${e}`;$("miniLabel").textContent=lab;
+    const idx=SCALE.findIndex(([lo])=>p>=lo);document.querySelectorAll(".sc")[idx]?.classList.add("on");
+    $("breakdown").innerHTML=bd.map(([l,v])=>`<div class="bd"><span>${esc(l)}</span><span>${fmt(v)}</span></div>`).join("")+`<div class="bd total"><span>Total</span><span>${fmt(sum)}</span></div>`;
+  }else{
+    $("pct").textContent="–";$("eqv").textContent="";
+    const inc=missing.length&&!bad.length&&wOk;
+    st.textContent=inc?"Incomplete":"Not computed";st.className="pill st-inc";
+    $("exact").textContent=inc?"Fill in every score to see your final grade.":"Fix the entries below to see your final grade.";
+    $("mini").textContent=inc?"INC":"–";$("miniLabel").textContent=inc?"Incomplete":"Check entries";
+    $("breakdown").innerHTML="";
+  }
+  renderCoursesLabel();
+}
+function renderCoursesLabel(){const o=$("courseSel").querySelector(`option[value="${cur().id}"]`);if(o)o.textContent=cur().name||"Untitled course"}
+const esc=s=>String(s).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+
+$("scale").innerHTML=SCALE.map(([,g],i)=>`<div class="sc"><span>${g}</span><span>${RANGES[i]}</span></div>`).join("");
+$("courseName").addEventListener("input",e=>{cur().name=e.target.value;save();renderCoursesLabel()});
+$("courseSel").addEventListener("change",e=>{state.active=e.target.value;save();resetDel();renderRows()});
+$("addRow").addEventListener("click",()=>{const tk=t("","","","");cur().tasks.push(tk);save();renderRows();$("n-"+tk.id).focus()});
+$("newCourse").addEventListener("click",()=>{const c=blankCourse();state.courses.push(c);state.active=c.id;save();resetDel();renderCourses();renderRows();$("courseName").focus()});
+let armTimer;const del=$("delCourse");
+function resetDel(){clearTimeout(armTimer);del.classList.remove("armed");del.textContent="Delete course"}
+del.addEventListener("click",()=>{
+  if(!del.classList.contains("armed")){del.classList.add("armed");del.textContent="Tap again to delete";armTimer=setTimeout(resetDel,4000);return}
+  resetDel();state.courses=state.courses.filter(c=>c.id!==cur().id);
+  if(!state.courses.length)state.courses.push(blankCourse());
+  state.active=state.courses[0].id;save();renderCourses();renderRows();
+});
+renderCourses();renderRows();
+</script>
+</body>
+</html>
